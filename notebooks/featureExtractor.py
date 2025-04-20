@@ -1,0 +1,113 @@
+import librosa
+import librosa.display
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+
+
+class FeatureExtractor:
+    def __init__(self, sr=22050, frame_size=2048, hop_length=512):
+        self.sr = sr
+        self.frame_size = frame_size
+        self.hop_length = hop_length
+
+    def extract_features(self, audio):
+        features = {}
+
+        features["zcr"] = self.extract_zcr(audio)
+        features["rms"] = self.extract_rms(audio)
+        features["amplitude_envelope"] = self.extract_amplitude_envelope(audio)
+
+        features["spectral_centroid"] = self.extract_spectral_centroid(audio)
+        features["spectral_bandwidth"] = self.extract_spectral_bandwidth(audio)
+        features["band_energy_ratio"] = self.band_energy_ratio(
+            audio, split_frequency=1000
+        )
+
+        return features
+
+    def extract_zcr(self, audio):
+        return librosa.feature.zero_crossing_rate(
+            audio, frame_length=self.frame_size, hop_length=self.hop_length
+        )[0]
+
+    def extract_rms(self, audio):
+        return librosa.feature.rms(
+            y=audio, frame_length=self.frame_size, hop_length=self.hop_length
+        )[0]
+
+    def extract_amplitude_envelope(self, audio):
+        return np.array(
+            [
+                max(audio[i : i + self.frame_size])
+                for i in range(0, len(audio), self.hop_length)
+            ]
+        )
+
+    def extract_spectral_centroid(self, audio):
+        return librosa.feature.spectral_centroid(
+            y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length
+        )[0]
+
+    def extract_spectral_bandwidth(self, audio):
+        return librosa.feature.spectral_bandwidth(
+            y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length
+        )[0]
+
+    def band_energy_ratio(self, audio, split_frequency=1000):
+        spectrogram = librosa.stft(
+            audio, n_fft=self.frame_size, hop_length=self.hop_length
+        )
+
+        num_frequency_bins = self.frame_size // 2 + 1
+        frequency_range = self.sr / 2
+        frequency_delta_per_bin = frequency_range / num_frequency_bins
+        split_frequency_bin = int(math.floor(split_frequency / frequency_delta_per_bin))
+
+        power_spectrogram = np.abs(spectrogram) ** 2
+        power_spectrogram = power_spectrogram.T
+
+        band_energy_ratio = []
+        for frame in power_spectrogram:
+            sum_power_low = frame[:split_frequency_bin].sum()
+            sum_power_high = frame[split_frequency_bin:].sum()
+            ber = sum_power_low / (sum_power_high + 1e-10)
+            band_energy_ratio.append(ber)
+
+        return np.array(band_energy_ratio)
+
+
+    def plot_features(self, audio, features=None):
+        if features is None:
+            features = self.extract_features(audio)
+
+        plot_configs = [
+            {"feature": "zcr", "color": "r", "title": "Zero Crossing Rate"},
+            {"feature": "rms", "color": "g", "title": "RMS Energy"},
+            {"feature": "amplitude_envelope", "color": "b", "title": "Amplitude Envelope"},
+            {"feature": "spectral_centroid", "color": "m", "title": "Spectral Centroid"},
+            {"feature": "spectral_bandwidth", "color": "c", "title": "Spectral Bandwidth"},
+            {"feature": "band_energy_ratio", "color": "y", "title": "Band Energy Ratio"},
+        ]
+
+        plt.figure(figsize=(14, 10))
+
+        for i, config in enumerate(plot_configs, 1):
+            feature_name = config["feature"]
+            feature_data = features[feature_name]
+
+            # Handle 2D features (like those from librosa)
+            if isinstance(feature_data, np.ndarray) and feature_data.ndim > 1:
+                feature_data = feature_data[0]  # Take first (and only) row
+
+            plt.subplot(3, 2, i)
+            frames = range(len(feature_data))
+            t = librosa.frames_to_time(frames, hop_length=self.hop_length)
+
+            librosa.display.waveshow(audio, sr=self.sr, alpha=0.5)
+            plt.plot(t, feature_data, color=config["color"], label=config["title"])
+            plt.title(f'Waveform with {config["title"]}')
+            plt.legend()
+
+        plt.tight_layout()
+        plt.show()
