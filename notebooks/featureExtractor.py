@@ -14,16 +14,23 @@ class FeatureExtractor:
     def extract_features(self, audio):
         features = {}
 
+        # Time domain features
         features["zcr"] = self.extract_zcr(audio)
         features["rms"] = self.extract_rms(audio)
         features["amplitude_envelope"] = self.extract_amplitude_envelope(audio)
 
+        # Frequency domain features
         features["spectral_centroid"] = self.extract_spectral_centroid(audio)
         features["spectral_bandwidth"] = self.extract_spectral_bandwidth(audio)
         features["band_energy_ratio"] = self.band_energy_ratio(
             audio, split_frequency=1000
         )
-
+        features["spectral_rolloff"] = self.extract_spectral_rolloff(audio)
+        features["spectral_contrast"] = self.extract_spectral_contrast(audio)
+        features["spectral_flatness"] = self.extract_spectral_flatness(audio)
+        features["mfcc"] = self.extract_mfcc(audio)
+        features["mel_spectrogram"] = self.mel_spectrogram(audio)
+        features["spectrogram"] = self.extract_spectrogram(audio)
         return features
 
     def extract_zcr(self, audio):
@@ -76,6 +83,36 @@ class FeatureExtractor:
 
         return np.array(band_energy_ratio)
 
+    def extract_spectral_rolloff(self, audio):
+        return librosa.feature.spectral_rolloff(
+            y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length
+        )[0]
+
+    def extract_spectral_contrast(self, audio):
+        contrast = librosa.feature.spectral_contrast(
+            y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length
+        )
+        return np.mean(contrast, axis=0)
+
+    def extract_spectral_flatness(self, audio):
+        return librosa.feature.spectral_flatness(
+            y=audio, n_fft=self.frame_size, hop_length=self.hop_length
+        )[0]
+    
+    def extract_spectrogram(self, audio):
+        return librosa.amplitude_to_db(librosa.stft(audio), ref=np.max)
+    
+    def mel_spectrogram(self,audio):
+        return librosa.feature.melspectrogram(
+            y=audio, sr=self.sr, hop_length=self.hop_length, n_mels=128
+        )[0]
+
+
+    def extract_mfcc(self, audio, n_mfcc=13):
+        mfccs = librosa.feature.mfcc(
+            y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length, n_mfcc=n_mfcc
+        )
+        return np.mean(mfccs, axis=0)
 
     def plot_features(self, audio, features=None):
         if features is None:
@@ -88,9 +125,17 @@ class FeatureExtractor:
             {"feature": "spectral_centroid", "color": "m", "title": "Spectral Centroid"},
             {"feature": "spectral_bandwidth", "color": "c", "title": "Spectral Bandwidth"},
             {"feature": "band_energy_ratio", "color": "y", "title": "Band Energy Ratio"},
+            {"feature": "spectral_rolloff", "color": "pink", "title": "Spectral Rolloff"},
+            {"feature": "spectral_contrast", "color": "orange", "title": "Spectral Contrast"},
+            {"feature": "spectral_flatness", "color": "purple", "title": "Spectral Flatness"},
+            {"feature": "mfcc", "color": "brown", "title": "MFCC"},
+            {"feature": "mel_spectrogram", "color": "red", "title": "Mel Spectrogram"},
+            {"feature": "spectrogram", "color": "blue", "title": "Spectrogram"}
         ]
 
-        plt.figure(figsize=(14, 10))
+        num_features = len(plot_configs)
+        num_rows = (num_features + 1) // 2  # Ceiling division
+        plt.figure(figsize=(14, 4 * num_rows))
 
         for i, config in enumerate(plot_configs, 1):
             feature_name = config["feature"]
@@ -100,7 +145,7 @@ class FeatureExtractor:
             if isinstance(feature_data, np.ndarray) and feature_data.ndim > 1:
                 feature_data = feature_data[0]  # Take first (and only) row
 
-            plt.subplot(3, 2, i)
+            plt.subplot(num_rows, 2, i)
             frames = range(len(feature_data))
             t = librosa.frames_to_time(frames, hop_length=self.hop_length)
 
