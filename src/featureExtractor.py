@@ -109,10 +109,12 @@ class FeatureExtractor:
 
 
     def extract_mfcc(self, audio, n_mfcc=13):
+        
         mfccs = librosa.feature.mfcc(
             y=audio, sr=self.sr, n_fft=self.frame_size, hop_length=self.hop_length, n_mfcc=n_mfcc
         )
-        return np.mean(mfccs, axis=0)
+        
+        return mfccs
 
     def plot_features(self, audio, features=None):
         if features is None:
